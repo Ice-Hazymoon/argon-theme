@@ -185,9 +185,9 @@ require_once(get_template_directory() . '/emotions.php');
 function argon_get_first_image_of_article(){
 	global $post;
 	$post_content_full = apply_filters('the_content', preg_replace( '<!--more(.*?)-->', '', $post -> post_content));
-	preg_match('/<img(.*?)src="((http:|https:)?\/\/(.*?))"(.*?)\/>/', $post_content_full, $match);
-	if (isset($match[2])){
-		return $match[2];
+	preg_match('/<img(.*?)(src|data-original)=[\"\']((http:|https:)?\/\/(.*?))[\"\'](.*?)\/?>/', $post_content_full, $match);
+	if (isset($match[3])){
+		return $match[3];
 	}
 	return false;
 }
@@ -333,7 +333,7 @@ if (!session_id()){
 //页面 Description Meta
 function get_seo_description(){
 	global $post;
-	if ((is_single() || is_page())){
+	if (is_single() || is_page()){
 		if (get_the_excerpt() != ""){
 			return get_the_excerpt();
 		}
@@ -379,6 +379,16 @@ function get_seo_keywords(){
 		return single_term_title('', false);
 	}
 	return get_option('argon_seo_keywords');
+}
+//页面分享预览图
+function get_og_image(){
+	global $post;
+	$postID = $post -> ID;
+	$argon_first_image_as_thumbnail = get_post_meta($postID, 'argon_first_image_as_thumbnail', 'true');
+	if (has_post_thumbnail() || $argon_first_image_as_thumbnail == 'true'){
+		return argon_get_post_thumbnail($postID);
+	}
+	return '';
 }
 //页面浏览量
 function get_post_views($post_id){
@@ -1414,11 +1424,13 @@ function get_avatar_by_qqnumber($avatar){
 }
 add_filter('get_avatar', 'get_avatar_by_qqnumber');
 //判断 QQ 号合法性
-function check_qqnumber($qqnumber){
-	if (preg_match("/^[1-9][0-9]{4,10}$/", $qqnumber)){
-		return true;
-	} else {
-		return false;
+if (!function_exists('check_qqnumber')){
+	function check_qqnumber($qqnumber){
+		if (preg_match("/^[1-9][0-9]{4,10}$/", $qqnumber)){
+			return true;
+		} else {
+			return false;
+		}
 	}
 }
 //获取顶部 Banner 背景图（用户指定或必应日图）
@@ -1461,7 +1473,7 @@ function argon_lazyload($content){
 function argon_fancybox($content){
 	if(!is_feed() && !is_robots() && !is_home()){
 		if (get_option('argon_enable_lazyload') != 'false'){
-			$content = preg_replace('/<img(.*?)data-original=[\'"](.*?)[\'"](.*?)((\/>)|>|(<\/img>))/i',"<div class='fancybox-wrapper' data-fancybox='post-images' href='$2'>$0</div>" , $content);
+			$content = preg_replace('/<img(.*?)data-original=[\'"](.*?)[\'"](.*?)((\/>)|>|(<\/img>))/i',"<div class='fancybox-wrapper lazyload-container-unload' data-fancybox='post-images' href='$2'>$0</div>" , $content);
 		}else{
 			$content = preg_replace('/<img(.*?)src=[\'"](.*?)[\'"](.*?)((\/>)|>|(<\/img>))/i',"<div class='fancybox-wrapper' data-fancybox='post-images' href='$2'>$0</div>" , $content);
 		}
@@ -1718,6 +1730,14 @@ function argon_meta_box_1(){
 			<option value="true" <?php if ($argon_first_image_as_thumbnail=='true'){echo 'selected';} ?>><?php _e("使用", 'argon');?></option>
 			<option value="false" <?php if ($argon_first_image_as_thumbnail=='false'){echo 'selected';} ?>><?php _e("不使用", 'argon');?></option>
 		</select>
+		<h4><?php _e("显示文章过时信息", 'argon');?></h4>
+		<?php $argon_show_post_outdated_info = get_post_meta($post->ID, "argon_show_post_outdated_info", true);?>
+		<select name="argon_show_post_outdated_info" id="argon_show_post_outdated_info">
+			<option value="default" <?php if ($argon_show_post_outdated_info=='default'){echo 'selected';} ?>><?php _e("跟随全局设置", 'argon');?></option>
+			<option value="always" <?php if ($argon_show_post_outdated_info=='always'){echo 'selected';} ?>><?php _e("一直显示", 'argon');?></option>
+			<option value="never" <?php if ($argon_show_post_outdated_info=='never'){echo 'selected';} ?>><?php _e("永不显示", 'argon');?></option>
+		</select>
+		<p style="margin-top: 15px;"><?php _e("单独控制该文章的过时信息显示。", 'argon');?></p>
 		<h4><?php _e("文末附加内容", 'argon');?></h4>
 		<?php $argon_after_post = get_post_meta($post->ID, "argon_after_post", true);?>
 		<textarea name="argon_after_post" id="argon_after_post" rows="3" cols="30" style="width:100%;"><?php if (!empty($argon_after_post)){echo $argon_after_post;} ?></textarea>
@@ -1756,6 +1776,7 @@ function argon_save_meta_data($post_id){
 	update_post_meta($post_id, 'argon_hide_readingtime', $_POST['argon_meta_hide_readingtime']);
 	update_post_meta($post_id, 'argon_meta_simple', $_POST['argon_meta_simple']);
 	update_post_meta($post_id, 'argon_first_image_as_thumbnail', $_POST['argon_first_image_as_thumbnail']);
+	update_post_meta($post_id, 'argon_show_post_outdated_info', $_POST['argon_show_post_outdated_info']);
 	update_post_meta($post_id, 'argon_after_post', $_POST['argon_after_post']);
 	update_post_meta($post_id, 'argon_custom_css', $_POST['argon_custom_css']);
 }
@@ -1784,6 +1805,8 @@ if (get_option("argon_hide_categories") != ""){
 }
 //文章过时信息显示
 function argon_get_post_outdated_info(){
+	global $post;
+	$post_show_outdated_info_status = strval(get_post_meta($post -> ID, 'argon_show_post_outdated_info', true));
 	if (get_option("argon_outdated_info_tip_type") == "toast"){
 		$before = "<div id='post_outdate_toast' style='display:none;' data-text='";
 		$after = "'></div>";
@@ -1803,7 +1826,7 @@ function argon_get_post_outdated_info(){
 	}else{
 		$date_delta = $modify_date_delta;
 	}
-	if ($date_delta <= $delta){
+	if (($date_delta <= $delta && $post_show_outdated_info_status != 'always') || $post_show_outdated_info_status == 'never'){
 		return "";
 	}
 	$content = str_replace("%date_delta%", $date_delta, $content);
@@ -1811,6 +1834,54 @@ function argon_get_post_outdated_info(){
 	$content = str_replace("%post_date_delta%", $post_date_delta, $content);
 	return $before . $content . $after;
 }
+//Gutenberg 编辑器区块
+function argon_init_gutenberg_blocks() {
+	wp_register_style(
+		'argon-gutenberg-block-frontend-css',
+		$GLOBALS['assets_path'].'/gutenberg/dist/dist/blocks.style.build.css',
+		is_admin() ? array('wp-editor') : null,
+		null
+	);
+	wp_register_script(
+		'argon-gutenberg-block-js',
+		$GLOBALS['assets_path'].'/gutenberg/dist/blocks.build.js',
+		array( 'wp-blocks', 'wp-i18n', 'wp-element', 'wp-editor'),
+		null,
+		true
+	);
+	wp_register_style(
+		'argon-gutenberg-block-backend-css',
+		$GLOBALS['assets_path'].'/gutenberg/dist/blocks.editor.build.css',
+		array('wp-edit-blocks'),
+		filemtime(get_template_directory() . '/gutenberg/dist/blocks.editor.build.css')
+	);
+	register_block_type(
+		'argon/argon-gutenberg-block', array(
+			//'style'         => 'argon-gutenberg-block-frontend-css',
+			'editor_script' => 'argon-gutenberg-block-js',
+			'editor_style'  => 'argon-gutenberg-block-backend-css',
+		)
+	);
+}
+add_action('init', 'argon_init_gutenberg_blocks');
+function argon_add_gutenberg_category($block_categories, $editor_context) {
+	if (!empty($editor_context->post)){
+		array_push(
+			$block_categories,
+			array(
+				'slug'  => 'argon',
+				'title' => 'Argon',
+				'icon'  => null,
+			)
+		);
+	}
+	return $block_categories;
+}
+add_filter('block_categories_all', 'argon_add_gutenberg_category', 10, 2);
+function argon_admin_i18n_info(){
+	echo "<script>var argon_language = '" . argon_get_locate() . "';</script>";
+}
+add_filter('admin_head', 'argon_admin_i18n_info');
 //主题文章短代码解析
 add_shortcode('br','shortcode_br');
 function shortcode_br($attr,$content=""){
@@ -1981,10 +2052,9 @@ function shortcode_admonition($attr,$content=""){
 add_shortcode('collapse','shortcode_collapse_block');
 add_shortcode('fold','shortcode_collapse_block');
 function shortcode_collapse_block($attr,$content=""){
-	$collapse_id = mt_rand(1000000000 , 9999999999);
 	$collapsed = isset($attr['collapsed']) ? $attr['collapsed'] : 'true';
 	$show_border_left = isset($attr['showleftborder']) ? $attr['showleftborder'] : 'false';
-	$out = "<div collapse-id='" . $collapse_id . "'" ;
+	$out = "<div " ;
 	$out .= " class='collapse-block shadow-sm";
 	$color = isset($attr['color']) ? $attr['color'] : 'none';
 	switch ($color){
@@ -2024,7 +2094,7 @@ function shortcode_collapse_block($attr,$content=""){
 	}
 	$out .= "'>";
 
-	$out .= "<div class='collapse-block-title' collapse-id='" . $collapse_id . "'>";
+	$out .= "<div class='collapse-block-title'>";
 	if (isset($attr['icon'])){
 		$out .= "<i class='fa fa-" . $attr['icon'] . "'></i> ";
 	}
@@ -2094,9 +2164,6 @@ function shortcode_friend_link($attr,$content=""){
 			</div>";
 	}
 	$out .= "</div></div>";
-	?>
-	<?php
-	get_template_part( 'template-parts/friendlinks', "style1" );
 	return $out;
 }
 add_shortcode('sfriendlinks','shortcode_friend_link_simple');
@@ -2216,6 +2283,7 @@ function shortcode_timeline($attr,$content=""){
 	return $out;
 }
 add_shortcode('hidden','shortcode_hidden');
+add_shortcode('spoiler','shortcode_hidden');
 function shortcode_hidden($attr,$content=""){
 	$out = "<span class='argon-hidden-text";
 	$tip = isset($attr['tip']) ? $attr['tip'] : '';
@@ -2624,7 +2692,7 @@ function themeoptions_page(){
 						<th><label><?php _e('页面布局', 'argon');?></label></th>
 						<td>
 							<div class="radio-with-img">
-								<?php $argon_page_layout = (get_option('argon_page_layout') == '' ? 'double' : get_option('argon_page_layout')); ?>
+								<?php $argon_page_layout = get_option('argon_page_layout', 'double'); ?>
 								<div class="radio-img">
 									<svg width="250" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080"><rect width="1920" height="1080" style="fill:#e6e6e6"/><g style="opacity:0.5"><rect width="1920" height="381" style="fill:#5e72e4"/></g><rect x="388.5" y="256" width="258" height="179" style="fill:#5e72e4"/><rect x="388.5" y="470" width="258" height="485" style="fill:#fff"/><rect x="689.5" y="256.5" width="842" height="250" style="fill:#fff"/><rect x="689.5" y="536.5" width="842" height="250" style="fill:#fff"/><rect x="689.5" y="817" width="842" height="250" style="fill:#fff"/></svg>
 								</div>
@@ -2649,6 +2717,24 @@ function themeoptions_page(){
 								<label><input name="argon_page_layout" type="radio" value="double-reverse" <?php if ($argon_page_layout=='double-reverse'){echo 'checked';} ?>> <?php _e('双栏(反转)', 'argon');?></label>
 							</div>
 							<p class="description" style="margin-top: 15px;"><?php _e('使用单栏时，关于左侧栏的设置将失效。', 'argon');?></br><?php _e('使用三栏时，请前往 "外观-小工具" 设置页面配置右侧栏内容。', 'argon');?></p>
+						</td>
+					</tr>
+					<tr>
+						<th><label><?php _e('文章列表卡片布局', 'argon');?></label></th>
+						<td>
+							<div class="radio-with-img">
+								<?php $argon_article_list_layout = get_option('argon_article_list_layout', '1'); ?>
+								<div class="radio-img">
+									<svg width="250" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1921 871"><rect x="0.5" y="0.5" width="1920" height="870" style="fill:#f7f8f8;stroke:#231815;stroke-miterlimit:10"/><rect x="0.5" y="0.5" width="1920" height="538.05" style="fill:#abb7ff"/><rect x="48.5" y="613.55" width="1806" height="35" rx="4" style="fill:#efefef"/><rect x="48.5" y="663.05" width="1806" height="35" rx="4" style="fill:#efefef"/><rect x="48.5" y="712.55" width="1806" height="35" rx="4" style="fill:#efefef"/><rect x="48.5" y="792.52" width="116.97" height="38.07" rx="4" style="fill:#dcdddd"/><rect x="178.95" y="792.52" width="97.38" height="38.07" rx="4" style="fill:#dcdddd"/><rect x="288.4" y="792.52" width="125.79" height="38.07" rx="4" style="fill:#dcdddd"/><g style="opacity:0.66"><rect x="432.78" y="320.9" width="1055.43" height="55.93" rx="4" style="fill:#f7f8f8"/></g><g style="opacity:0.31"><rect x="734.76" y="411.73" width="451.48" height="25.08" rx="4" style="fill:#fff"/></g><g style="opacity:0.31"><rect x="734.76" y="453.24" width="451.48" height="25.08" rx="4" style="fill:#fff"/></g></svg>
+								</div>
+								<label><input name="argon_article_list_layout" type="radio" value="1" <?php if ($argon_article_list_layout=='1'){echo 'checked';} ?>> <?php _e('布局', 'argon');?> 1</label>
+							</div>
+							<div class="radio-with-img">
+								<div class="radio-img">
+									<svg width="250" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 870"><rect width="1920" height="870" style="fill:#f7f8f8;stroke: #231815;stroke-miterlimit: 10;"/><rect width="630.03" height="870" style="fill:#abb7ff"/><rect x="689.57" y="174.16" width="1144.6" height="35" rx="4" style="fill:#efefef"/><rect x="689.57" y="238.66" width="1144.6" height="35" rx="4" style="fill:#efefef"/><rect x="689.57" y="303.16" width="1144.6" height="35" rx="4" style="fill:#efefef"/><rect x="689.57" y="792.02" width="116.97" height="38.07" rx="4" style="fill:#dcdddd"/><rect x="820.02" y="792.02" width="97.38" height="38.07" rx="4" style="fill:#dcdddd"/><rect x="929.47" y="792.02" width="125.79" height="38.07" rx="4" style="fill:#dcdddd"/><g style="opacity:0.23"><rect x="689.57" y="52.26" width="1055.43" height="55.93" rx="4" style="fill:#5e72e4"/></g><rect x="689.57" y="677.09" width="451.48" height="25.08" rx="4" style="fill:#efefef"/><rect x="689.57" y="718.6" width="451.48" height="25.08" rx="4" style="fill:#efefef"/><rect x="689.57" y="363.63" width="1144.6" height="35" rx="4" style="fill:#efefef"/><rect x="689.57" y="426.13" width="1144.6" height="35" rx="4" style="fill:#efefef"/><rect x="689.57" y="492.63" width="1144.6" height="35" rx="4" style="fill:#efefef"/></svg>
+								</div>
+								<label><input name="argon_article_list_layout" type="radio" value="2" <?php if ($argon_article_list_layout=='2'){echo 'checked';} ?>> <?php _e('布局', 'argon');?> 2</label>
+							</div>
 						</td>
 					</tr>
 					<tr><th class="subtitle"><h3><?php _e('字体', 'argon');?></h3></th></tr>
@@ -3550,6 +3636,17 @@ window.pjaxLoaded = function(){
 							<p class="description"><?php _e('从首页或分类目录进入文章时，使用平滑过渡（可能影响加载文章时的性能）', 'argon');?></p>
 						</td>
 					</tr>
+					<tr>
+						<th><label><?php _e('禁用 Pjax 加载后的页面滚动动画', 'argon');?></label></th>
+						<td>
+							<select name="argon_disable_pjax_animation">
+								<?php $argon_disable_pjax_animation = get_option('argon_disable_pjax_animation'); ?>
+								<option value="false" <?php if ($argon_disable_pjax_animation=='false'){echo 'selected';} ?>><?php _e('不禁用', 'argon');?></option>
+								<option value="true" <?php if ($argon_disable_pjax_animation=='true'){echo 'selected';} ?>><?php _e('禁用', 'argon');?></option>
+							</select>
+							<p class="description"><?php _e('Pjax 替换页面内容后会平滑滚动到页面顶部，如果你不喜欢，可以禁用这个选项', 'argon');?></p>
+						</td>
+					</tr>
 					<tr><th class="subtitle"><h2><?php _e('评论', 'argon');?></h2></th></tr>
 					<tr><th class="subtitle"><h3><?php _e('评论分页', 'argon');?></h3></th></tr>
 					<tr>
@@ -3819,6 +3916,13 @@ window.pjaxLoaded = function(){
 								<option value="true" <?php if ($argon_hide_shortcode_in_preview=='true'){echo 'selected';} ?>><?php _e('是', 'argon');?></option>
 							</select>
 							<p class="description"></p>
+						</td>
+					</tr>
+					<tr>
+						<th><label><?php _e('文章内容预览截取字数', 'argon');?></label></th>
+						<td>
+							<input type="number" name="argon_trim_words_count" min="0" max="1000" value="<?php echo get_option('argon_trim_words_count', 175); ?>"/>
+							<p class="description"><?php _e('设为 0 来隐藏文章内容预览', 'argon');?></p>
 						</td>
 					</tr>
 					<tr>
@@ -4208,6 +4312,7 @@ function argon_update_themeoptions(){
 		argon_update_option('argon_show_thumbnail_in_banner_in_content_page');
 		argon_update_option('argon_update_source');
 		argon_update_option('argon_enable_into_article_animation');
+		argon_update_option('argon_disable_pjax_animation');
 		argon_update_option('argon_fab_show_darkmode_button');
 		argon_update_option('argon_fab_show_settings_button');
 		argon_update_option('argon_fab_show_gotocomment_button');
@@ -4245,6 +4350,7 @@ function argon_update_themeoptions(){
 		argon_update_option('argon_enable_banner_title_typing_effect');
 		argon_update_option('argon_banner_typing_effect_interval');
 		argon_update_option('argon_page_layout');
+		argon_update_option('argon_article_list_layout');
 		argon_update_option('argon_enable_pangu');
 		argon_update_option('argon_assets_path');
 		argon_update_option('argon_comment_ua');
@@ -4274,6 +4380,7 @@ function argon_update_themeoptions(){
 		argon_update_option('argon_disable_googlefont');
 		argon_update_option('argon_disable_codeblock_style');
 		argon_update_option('argon_reference_list_title');
+		argon_update_option('argon_trim_words_count');
 
 		//LazyLoad 相关
 		argon_update_option('argon_enable_lazyload');
@@ -4305,13 +4412,15 @@ function argon_update_themeoptions(){
 argon_update_themeoptions();
 
 /*主题菜单*/
-register_nav_menus( array(
-	'toolbar_menu' => __('顶部导航', 'argon'),
-	'leftbar_menu' => __('左侧栏菜单', 'argon'),
-	'leftbar_author_links' => __('左侧栏作者个人链接', 'argon'),
-	'leftbar_friend_links' => __('左侧栏友情链接', 'argon')
-));
-
+add_action('init', 'init_nav_menus');
+function init_nav_menus(){
+	register_nav_menus( array(
+		'toolbar_menu' => __('顶部导航', 'argon'),
+		'leftbar_menu' => __('左侧栏菜单', 'argon'),
+		'leftbar_author_links' => __('左侧栏作者个人链接', 'argon'),
+		'leftbar_friend_links' => __('左侧栏友情链接', 'argon')
+	));
+}
 
 //隐藏 admin 管理条
 //show_admin_bar(false);

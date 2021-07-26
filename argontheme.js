@@ -53,7 +53,7 @@ translation['en_US'] = {
 	"评论内容不能为空": "Comment content cannot be empty",
 	"编辑中": "Editing",
 	"正在编辑": "Editing",
-	"评论正在编辑中...": "Comment is editing",
+	"评论正在编辑中...": "Comment is being edited...",
 	"编辑": "Edit",
 	"评论编辑失败": "Comment editing failed",
 	"已编辑": "Edited",
@@ -1390,7 +1390,14 @@ function lazyloadInit(){
 	if (argonConfig.lazyload.effect == "none"){
 		delete argonConfig.lazyload.effect;
 	}
-	$("article img.lazyload:not(.lazyload-loaded) , .post-thumbnail.lazyload:not(.lazyload-loaded) , .related-post-thumbnail.lazyload:not(.lazyload-loaded)").lazyload(Object.assign(argonConfig.lazyload, {load: function(){$(this).addClass("lazyload-loaded")}}));
+	$("article img.lazyload:not(.lazyload-loaded) , .post-thumbnail.lazyload:not(.lazyload-loaded) , .related-post-thumbnail.lazyload:not(.lazyload-loaded)").lazyload(
+		Object.assign(argonConfig.lazyload, {
+			load: function () {
+				$(this).addClass("lazyload-loaded")
+				$(this).parent().removeClass("lazyload-container-unload")
+			}
+		})
+	);
 	$(".comment-item-text .comment-sticker.lazyload").lazyload(Object.assign(argonConfig.lazyload, {load: function(){$(this).removeClass("lazyload")}}));
 }
 lazyloadInit();
@@ -1555,13 +1562,14 @@ $(document).on("click" , "#blog_categories .tag" , function(){
 
 /*折叠区块小工具*/
 $(document).on("click" , ".collapse-block .collapse-block-title" , function(){
-	let id = this.getAttribute("collapse-id");
-	let selecter = ".collapse-block[collapse-id='" + id +"']";
-	$(selecter).toggleClass("collapsed");
-	if ($(selecter).hasClass("collapsed")){
-		$(selecter + " .collapse-block-body").stop(true , false).slideUp(200);
+	let block = $(this).parent();
+	$(block).toggleClass("collapsed");
+	let inner = $(".collapse-block-body", block);
+	console.log(inner);
+	if (block.hasClass("collapsed")){
+		inner.stop(true, false).slideUp(200);
 	}else{
-		$(selecter + " .collapse-block-body").stop(true , false).slideDown(200);
+		inner.stop(true, false).slideDown(200);
 	}
 	$("html").trigger("scroll");
 });
