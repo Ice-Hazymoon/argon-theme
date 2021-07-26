@@ -4474,3 +4474,35 @@ function argon_login_page_style() {
 if (get_option('argon_enable_login_css') == 'true'){
 	add_action('login_head', 'argon_login_page_style');
 }
+
+
+// 启用文章状态
+add_theme_support( 'post-formats', array(
+	'aside',
+	'image',
+	'status',
+));
+
+//WordPress上传文件重命名
+function git_upload_filter($file) {
+	$time = date("YmdHis");
+	$file['name'] = $time . "" . mt_rand(1, 100) . "." . pathinfo($file['name'], PATHINFO_EXTENSION);
+	return $file;
+}
+add_filter('wp_handle_upload_prefilter', 'git_upload_filter');
+
+//彻底禁止WordPress缩略图
+add_filter( 'add_image_size', create_function( '', 'return 1;' ) );
+
+
+// 处理无标题状态
+function filter_post_empty_title($title){
+    $format = get_post_format();
+    if($title == $post_id || $title == '') {
+		$title = '[无标题] - '.get_post_format_string($format);
+    }
+    return $title;
+}
+add_filter('the_title','filter_post_empty_title');
+add_filter('get_the_title','filter_post_empty_title');
+
